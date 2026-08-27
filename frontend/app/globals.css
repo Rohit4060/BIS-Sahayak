@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+:root {
+  --bis-navy: #0c2a4a;
+  --bis-navy-deep: #071a30;
+  --bis-saffron: #e86a1c;
+  --bis-chakra: #2f6fed;
+  --bis-paper: #f4f6f9;
+  --bis-ink: #1c2733;
+  --bis-ink-soft: #55606e;
+  --bis-green: #157f4b;
+  --bis-border: #e2e7ee;
+}
+
+body {
+  background-color: var(--bis-paper);
+  color: var(--bis-ink);
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: var(--font-mono), monospace;
+}
+
+::selection {
+  background: var(--bis-saffron);
+  color: #fff;
+}
