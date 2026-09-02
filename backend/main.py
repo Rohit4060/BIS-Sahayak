@@ -10,8 +10,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from fastapi import Depends
 from database import get_db
+from labs_service import find_labs
 from services.search_service import search_chunks
 from services.standards_recommender import recommend_standards
+from services.compliance_service import check_compliance
 from fastapi import HTTPException
 
 app = FastAPI(title="BIS Sahayak AI Backend")
@@ -90,6 +92,46 @@ class RecommendResponse(BaseModel):
     product_description: str
     recommendations: list[Recommendation] = []
     message: str | None = None
+class ComplianceRequest(BaseModel):
+    product_description: str
+
+
+class ComplianceEvidence(BaseModel):
+    section: str | None
+    page: int | None
+    excerpt: str
+
+
+class ComplianceCitation(BaseModel):
+    standard_number: str | None
+    clause: str | None
+    page: int | None
+    source_url: str | None
+
+
+class ComplianceRequirement(BaseModel):
+    requirement: str
+    status: str
+    reason: str
+    testing_requirement: str | None
+    next_step: str | None
+
+
+class ComplianceStandard(BaseModel):
+    standard_number: str | None
+    title: str
+    requirements: list[ComplianceRequirement]
+    evidence: list[ComplianceEvidence]
+    citations: list[ComplianceCitation]
+
+
+class ComplianceResponse(BaseModel):
+    product_description: str
+    standards: list[ComplianceStandard] = []
+    limitations: str
+    message: str | None = None
+
+
 
 
 @app.get("/")
@@ -153,3 +195,114 @@ def recommend(request: RecommendRequest, db: Session = Depends(get_db)):
         )
 
     return RecommendResponse(**result)
+
+
+
+@app.post("/api/compliance/check", response_model=ComplianceResponse)
+def compliance_check(request: ComplianceRequest, db: Session = Depends(get_db)):
+    if not request.product_description or not request.product_description.strip():
+        raise HTTPException(status_code=400, detail="product_description cannot be empty.")
+
+    try:
+        result = check_compliance(db, request.product_description.strip())
+    except Exception as e:
+        print(f"Compliance check error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Compliance check failed. Please try again.",
+        )
+
+    return ComplianceResponse(**result)
+
+class LabCitation(BaseModel):
+    source_reference: str | None
+    source_url: str | None
+
+
+class LabResult(BaseModel):
+    name: str
+    location: str | None
+    testing_capabilities: list[str]
+    standard_numbers: list[str]
+    recognition_or_accreditation: str | None
+    reason: str
+    citations: list[LabCitation]
+
+
+class LabFindRequest(BaseModel):
+    product_description: str
+    standard_number: str | None = None
+
+
+class LabFindResponse(BaseModel):
+    product_description: str
+    laboratories: list[LabResult] = []
+    message: str | None = None
+    limitations: list[str] = []
+
+
+LABS_INSUFFICIENT_EVIDENCE_MSG = (
+    "I could not verify suitable BIS laboratory information from the available sources."
+)
+
+LABS_DATA_LIMITATION = (
+    "Laboratory results are limited to what has been explicitly entered into the "
+    "laboratories table — the knowledge base currently has no automated laboratory "
+    "ingestion pipeline, so this list is not exhaustive."
+)
+
+
+def _split_field(value: str | None) -> list[str]:
+    """Splits a comma-separated DB text field into a clean list. Returns []
+    for empty/null fields rather than [''] or [None]."""
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+@app.post("/api/labs/find", response_model=LabFindResponse)
+def labs_find(request: LabFindRequest, db: Session = Depends(get_db)):
+    if not request.product_description or not request.product_description.strip():
+        raise HTTPException(status_code=400, detail="product_description cannot be empty.")
+
+    try:
+        labs = find_labs(db, request.product_description.strip(), request.standard_number)
+    except Exception as e:
+        print(f"Labs find error: {e}")
+        raise HTTPException(status_code=500, detail="Laboratory search failed. Please try again.")
+
+    if not labs:
+        return LabFindResponse(
+            product_description=request.product_description,
+            laboratories=[],
+            message=LABS_INSUFFICIENT_EVIDENCE_MSG,
+            limitations=[LABS_DATA_LIMITATION],
+        )
+
+    laboratories = [
+        LabResult(
+            name=lab.name,
+            location=lab.location,
+            testing_capabilities=_split_field(lab.capabilities),
+            standard_numbers=_split_field(lab.standard_numbers),
+            recognition_or_accreditation=lab.accreditation_info,
+            reason=(
+                f"Matched on '{request.product_description.strip()}' against this "
+                "laboratory's stored name, location, or capabilities."
+            ),
+            citations=[
+                LabCitation(
+                    source_reference=lab.source_reference,
+                    source_url=lab.source_url,
+                )
+            ],
+        )
+        for lab in labs
+    ]
+
+    return LabFindResponse(
+        product_description=request.product_description,
+        laboratories=laboratories,
+        message=None,
+        limitations=[LABS_DATA_LIMITATION],
+    )

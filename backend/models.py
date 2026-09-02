@@ -39,3 +39,39 @@ class DocumentChunk(Base):
     embedding = Column(Vector(EMBEDDING_DIM), nullable=True)
 
     document = relationship("Document", back_populates="chunks")
+
+
+
+class Laboratory(Base):
+    """
+    Stores authoritative BIS-recognized/NABL-accredited testing laboratory
+    information for the Laboratory Finder (/api/labs/find).
+
+    NOTE: As of Milestone 12, this table has NO ingestion pipeline yet — it
+    is intentionally empty until authoritative laboratory data (e.g. from
+    BIS's official recognized-labs list) is sourced and loaded. Until then,
+    /api/labs/find will correctly return an insufficient-evidence response
+    for every query, which is the safe and honest behavior.
+
+    Future ingestion will need, per laboratory entry:
+      - name (required)
+      - location/address
+      - capabilities (what kinds of tests it can perform)
+      - standard_numbers (which IS/BIS standards it's recognized for)
+      - accreditation info (e.g. "NABL accredited per IS/ISO/IEC 17025",
+        "BIS recognized/empanelled") — only ever populated from a source
+        document that explicitly states this, never inferred
+      - source_url / source_reference (where this info was sourced from,
+        for citation purposes)
+    """
+    __tablename__ = "laboratories"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False)
+    location = Column(String, nullable=True)
+    capabilities = Column(Text, nullable=True)            # free text or comma-separated
+    standard_numbers = Column(Text, nullable=True)         # comma-separated IS numbers, e.g. "IS 302 (Part 1) : 2024, IS 17423 : 2021"
+    accreditation_info = Column(Text, nullable=True)       # e.g. "NABL accredited per IS/ISO/IEC 17025"
+    source_url = Column(String, nullable=True)
+    source_reference = Column(String, nullable=True)       # e.g. document title/page this was sourced from
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

@@ -7,4 +7,4 @@ import models  # noqa: F401  (import so the models register with Base before cre
 if __name__ == "__main__":
     print("Creating tables...")
     Base.metadata.create_all(bind=engine)
-    print("Done. Tables created: documents, document_chunks")
+    print("Done. Tables created: documents, document_chunks, laboratories")
