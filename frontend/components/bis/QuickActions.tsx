@@ -9,7 +9,7 @@ const iconMap = {
   "laboratory-finder": MapPinIcon,
 };
 
-type QuickActionsProps = { onSelect: (prompt: string) => void };
+type QuickActionsProps = { onSelect: (id: string, prompt: string) => void };
 
 export default function QuickActions({ onSelect }: QuickActionsProps) {
   return (
@@ -22,7 +22,7 @@ export default function QuickActions({ onSelect }: QuickActionsProps) {
             title={action.title}
             description={action.description}
             icon={iconMap[action.id as keyof typeof iconMap]}
-            onClick={() => onSelect(action.prompt)}
+            onClick={() => onSelect(action.id, action.prompt)}
           />
         ))}
       </div>

@@ -1,12 +1,13 @@
 import { navItems } from "../../lib/mockData";
-import { ChatIcon, ShieldCheckIcon, BookIcon, FlaskIcon, LinkIcon } from "./icons";
+import { ChatIcon, ShieldCheckIcon, BookIcon, FlaskIcon, BadgeIcon } from "./icons";
 
 const iconMap: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   "ask-bis": ChatIcon,
-  "compliance-checker": ShieldCheckIcon,
-  "standards-explorer": BookIcon,
+  standards: BookIcon,
+  compliance: ShieldCheckIcon,
+  hallmarking: BadgeIcon,
+  consumer: ChatIcon,
   laboratories: FlaskIcon,
-  sources: LinkIcon,
 };
 
 type SidebarProps = {

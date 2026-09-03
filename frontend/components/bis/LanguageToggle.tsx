@@ -1,20 +1,18 @@
-import { useState } from "react";
+import { languageOptions, type LanguageCode } from "../../lib/api";
 
-export default function LanguageToggle({ compact = false }: { compact?: boolean }) {
-  const [lang, setLang] = useState<"en" | "hi">("en");
+type LanguageToggleProps = {
+  compact?: boolean;
+  value: LanguageCode;
+  onChange: (language: LanguageCode) => void;
+};
+
+export default function LanguageToggle({ compact = false, value, onChange }: LanguageToggleProps) {
   return (
-    <div className={`inline-flex rounded-full border border-[var(--bis-border)] bg-white p-0.5 ${compact ? "text-[11px]" : "text-xs"}`}>
-      {(["en", "hi"] as const).map((code) => (
-        <button
-          key={code}
-          onClick={() => setLang(code)}
-          className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
-            lang === code ? "bg-[var(--bis-navy)] text-white" : "text-[var(--bis-ink-soft)]"
-          }`}
-        >
-          {code === "en" ? "EN" : "हिं"}
-        </button>
-      ))}
-    </div>
+    <label className={`inline-flex items-center gap-2 rounded-full border border-[var(--bis-border)] bg-white px-2 py-1 ${compact ? "text-[11px]" : "text-xs"}`}>
+      <span className="sr-only">Response language</span>
+      <select value={value} onChange={(event) => onChange(event.target.value as LanguageCode)} className="max-w-28 bg-transparent font-medium text-[var(--bis-navy)] outline-none">
+        {languageOptions.map((language) => <option key={language.code} value={language.code}>{language.label}</option>)}
+      </select>
+    </label>
   );
 }

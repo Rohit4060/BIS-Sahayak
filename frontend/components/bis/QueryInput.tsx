@@ -1,5 +1,7 @@
 import { SendIcon } from "./icons";
 import { sampleQueries } from "../../lib/mockData";
+import type { Citation } from "../../lib/api";
+import CitationList from "./CitationList";
 
 type QueryInputProps = {
   value: string;
@@ -8,9 +10,11 @@ type QueryInputProps = {
   submitted: boolean;
   loading: boolean;
   reply: string;
+  citations: Citation[];
+  error: string;
 };
 
-export default function QueryInput({ value, onChange, onSubmit, submitted, loading, reply }: QueryInputProps) {
+export default function QueryInput({ value, onChange, onSubmit, submitted, loading, reply, citations, error }: QueryInputProps) {
   return (
     <div className="rounded-2xl border border-[var(--bis-border)] bg-white p-5 shadow-sm sm:p-6">
       <p className="font-display text-lg font-semibold text-[var(--bis-navy)] sm:text-xl">Ask BIS Sahayak AI</p>
@@ -45,11 +49,7 @@ export default function QueryInput({ value, onChange, onSubmit, submitted, loadi
           </button>
         ))}
       </div>
-      {submitted && (
-        <p className="mt-4 rounded-lg bg-[var(--bis-paper)] px-4 py-2.5 text-xs text-[var(--bis-ink-soft)]">
-          {loading ? "Sahayak is thinking..." : reply}
-        </p>
-      )}
+      {submitted && <div className="mt-4 rounded-lg bg-[var(--bis-paper)] px-4 py-3 text-sm text-[var(--bis-ink-soft)]">{loading ? "Sahayak is reviewing retrieved BIS evidence..." : error ? <p role="alert" className="text-red-700">{error}</p> : <><p className="whitespace-pre-wrap leading-relaxed text-[var(--bis-ink)]">{reply}</p><CitationList citations={citations} /></>}</div>}
     </div>
   );
 }

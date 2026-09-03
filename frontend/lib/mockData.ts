@@ -4,10 +4,11 @@ export type Stat = { label: string; value: string };
 
 export const navItems: NavItem[] = [
   { id: "ask-bis", label: "Ask BIS" },
-  { id: "compliance-checker", label: "Compliance Checker" },
-  { id: "standards-explorer", label: "Standards Explorer" },
+  { id: "standards", label: "Standards" },
+  { id: "compliance", label: "Compliance" },
+  { id: "hallmarking", label: "Hallmarking" },
+  { id: "consumer", label: "Consumer Help" },
   { id: "laboratories", label: "Laboratories" },
-  { id: "sources", label: "Sources" },
 ];
 
 export const quickActions: QuickAction[] = [
@@ -38,9 +39,9 @@ export const quickActions: QuickAction[] = [
 ];
 
 export const stats: Stat[] = [
-  { label: "Indian Standards indexed", value: "22,000+" },
-  { label: "Product categories covered", value: "650+" },
-  { label: "Recognised labs mapped", value: "180+" },
+  { label: "BIS documents indexed", value: "6" },
+  { label: "Grounded knowledge chunks", value: "176" },
+  { label: "Citation source", value: "Database" },
 ];
 
 export const sampleQueries: string[] = [
