@@ -59,6 +59,15 @@ MANDATORY_KEYWORDS = [
     "shall obtain",
     "shall comply",
     "required to obtain",
+    "legally required",
+    "legally binding",
+    "not eligible",
+    "ineligible",
+    "shall not",
+    "prohibited",
+    "liable to cancellation",
+    "liable for",
+    "shall be liable",
 ]
 
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))

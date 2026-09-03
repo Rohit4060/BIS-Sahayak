@@ -14,6 +14,8 @@ from labs_service import find_labs
 from services.search_service import search_chunks
 from services.standards_recommender import recommend_standards
 from services.compliance_service import check_compliance
+from services.hallmarking_service import get_hallmarking_help
+from services.consumer_service import get_consumer_help
 from fastapi import HTTPException
 
 app = FastAPI(title="BIS Sahayak AI Backend")
@@ -133,6 +135,46 @@ class ComplianceResponse(BaseModel):
 
 
 
+class HallmarkingRequest(BaseModel):
+    question: str
+
+
+class HallmarkingCitation(BaseModel):
+    source_reference: str | None
+    source_url: str | None
+
+
+
+
+
+class HallmarkingResponse(BaseModel):
+    question: str
+    answer: str
+    key_points: list[str] = []
+    next_steps: list[str] = []
+    status: str
+    citations: list[HallmarkingCitation] = []
+    limitations: list[str] = []
+
+
+class ConsumerRequest(BaseModel):
+    question: str
+
+
+class ConsumerCitation(BaseModel):
+    source_reference: str | None
+    source_url: str | None
+
+
+class ConsumerResponse(BaseModel):
+    question: str
+    answer: str
+    key_points: list[str] = []
+    next_steps: list[str] = []
+    status: str
+    citations: list[ConsumerCitation] = []
+    limitations: list[str] = []
+
 
 @app.get("/")
 def read_root():
@@ -214,6 +256,24 @@ def compliance_check(request: ComplianceRequest, db: Session = Depends(get_db)):
 
     return ComplianceResponse(**result)
 
+@app.post("/api/hallmarking/help", response_model=HallmarkingResponse)
+def hallmarking_help(request: HallmarkingRequest, db: Session = Depends(get_db)):
+    if not request.question or not request.question.strip():
+        raise HTTPException(status_code=400, detail="question cannot be empty.")
+
+    try:
+        result = get_hallmarking_help(db, request.question.strip())
+    except Exception as e:
+        print(f"Hallmarking help error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Hallmarking assistant failed. Please try again.",
+        )
+
+    return HallmarkingResponse(**result)
+
+
+
 class LabCitation(BaseModel):
     source_reference: str | None
     source_url: str | None
@@ -258,6 +318,20 @@ def _split_field(value: str | None) -> list[str]:
     if not value:
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
+
+@app.post("/api/consumer/help", response_model=ConsumerResponse)
+def consumer_help(request: ConsumerRequest, db: Session = Depends(get_db)):
+    if not request.question or not request.question.strip():
+        raise HTTPException(status_code=400, detail="question cannot be empty.")
+    try:
+        result = get_consumer_help(db, request.question.strip())
+    except Exception as e:
+        print(f"Consumer help error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Consumer assistant failed. Please try again.",
+        )
+    return ConsumerResponse(**result)
 
 
 @app.post("/api/labs/find", response_model=LabFindResponse)
