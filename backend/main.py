@@ -4,6 +4,7 @@ load_dotenv()  # Reads backend/.env and loads GEMINI_API_KEY into the environmen
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Literal
 
 from services.rag_service import get_rag_response, format_citation_footer
 from sqlalchemy import text
@@ -31,6 +32,7 @@ app.add_middleware(
 
 class ChatRequest(BaseModel):
     message: str
+    language: Literal["en", "hi", "bn", "mr", "ta", "te", "kn", "ml", "gu", "pa"] | None = None
 
 
 class Citation(BaseModel):
@@ -195,7 +197,7 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
         return ChatResponse(reply="Please enter a question for Sahayak.", citations=[])
 
     try:
-        result = get_rag_response(db, request.message.strip())
+        result = get_rag_response(db, request.message.strip(), request.language)
         footer = format_citation_footer(result["citations"])
         return ChatResponse(reply=result["answer"] + footer, citations=result["citations"])
     except Exception as e:
