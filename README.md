@@ -36,6 +36,8 @@ User Question → Query Embedding → pgvector Similarity Search
 
 Gemini never answers from open-ended knowledge — it only ever sees the BIS evidence chunks retrieved for that specific question. A backend validation step also rejects any standard number Gemini returns that wasn't among the retrieved candidates, to prevent hallucinated citations.
 
+For Ask BIS, generation uses `gemini-3.6-flash` first and `gemini-2.5-flash` only when the primary has a temporary provider failure. Each model is tried at most twice; both receive the identical retrieved evidence and safety instructions. If generation cannot be completed, the API returns a safe service message rather than an ungrounded answer.
+
 ---
 
 ## Features
@@ -91,6 +93,7 @@ Create a file named `.env` in the project root with:
 ```env
 POSTGRES_PASSWORD=your-chosen-db-password
 GEMINI_API_KEY=your-gemini-api-key-here
+GEMINI_FALLBACK_API_KEY=your-second-gemini-api-key-here
 ```
 
 **Backend `.env`** (used only if running the backend directly with Python, outside Docker):
@@ -100,7 +103,7 @@ cd backend
 cp .env.example .env
 ```
 
-Then open `backend/.env` and fill in your real `GEMINI_API_KEY` and `DATABASE_URL`.
+Then open `backend/.env` and fill in `GEMINI_API_KEY`, `GEMINI_FALLBACK_API_KEY`, and `DATABASE_URL`.
 
 > Never commit either `.env` file. Both are already covered by `.gitignore`.
 
@@ -108,7 +111,7 @@ Then open `backend/.env` and fill in your real `GEMINI_API_KEY` and `DATABASE_UR
 
 1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey).
 2. Sign in and click **Create API Key**.
-3. Copy the key into both `.env` files' `GEMINI_API_KEY` field.
+3. Put the primary key in `GEMINI_API_KEY` and a separate fallback key in `GEMINI_FALLBACK_API_KEY` in both `.env` files.
 
 ---
 
@@ -209,7 +212,13 @@ The knowledge base is built from BIS PDFs placed in `data/raw/`.
 
 ## Verification / Test Scripts
 
-There is no automated test suite (e.g. pytest) yet. The following are manual verification scripts in `backend/scripts/`, useful for checking that a specific part of the pipeline works after changes:
+The backend has an offline `pytest` suite covering retrieval, grounding, citations, language handling, and Gemini fallback behavior. Run it without consuming Gemini quota:
+
+```bash
+docker compose exec backend pytest -q
+```
+
+The following manual scripts are also available for focused pipeline checks:
 
 - `test_pdf_extraction.py` — verifies PDF text extraction
 - `test_metadata_extraction.py` — verifies clause/section/metadata extraction
@@ -226,11 +235,28 @@ python scripts\test_search.py
 
 ---
 
+## Demo Workflow
+
+Use questions that match the currently indexed evidence. The expected standard/document is a guide for the demonstrator; the application remains evidence-first and may correctly return insufficient evidence if the retrieval threshold is not met.
+
+| Demo question | Workflow | Expected evidence | Why it is reliable |
+|---|---|---|---|
+| `What registration does a jeweller need to sell hallmarked jewellery?` | Ask BIS or Hallmarking | IS 1417 : 2016, *Brief on Hallmarking Scheme* | The indexed brief discusses jeweller registration for selling hallmarked jewellery. |
+| `What are the guidelines for complaints about BIS certified products?` | Consumer Help | *Guidelines for Dealing with Complaints Related to Quality of BIS Certified Products* | The document is indexed with complaint scope, complainant categories, and handling actions. |
+| `What does IS 302 Part 1 cover?` | Ask BIS | IS 302 (Part 1) : 2024 / IEC 60335-1 : 2020 | The current KB contains this household electrical-appliance safety standard. |
+| `What is IS 17423:2021?` | Ask BIS | IS 17423 : 2021 | The current KB contains the medical textiles bio-protective coveralls specification. |
+| `How does BIS handle a quality complaint?` | Consumer Help | BIS complaint guidelines | The indexed evidence includes complaint receipt, investigation, and process-flow material. |
+| `What should I know about hallmarking gold jewellery?` | Hallmarking | IS 1417 : 2016 and hallmarking guidelines | The KB contains hallmarking-scheme evidence. |
+| `What BIS standard applies to a rocket engine?` | Ask BIS | None | Intentional insufficient-evidence demonstration. |
+
+The Laboratory Finder is safe to demonstrate with an empty-result query: the current laboratory table may be empty because no authoritative laboratory ingestion has been performed. It will report that limitation rather than inventing a laboratory.
+
 ## Current Limitations
 
 - Knowledge base currently contains a small initial set of BIS documents — this is the working pipeline proof, not the final scale. Architecture is designed to expand without structural changes.
-- No automated (pytest-style) test suite yet — only the manual scripts above.
-- Multilingual support is part of the product vision but not yet fully implemented in the current build.
+- The automated `pytest` suite covers the existing backend workflows and Gemini fallback behavior; it does not consume live Gemini quota.
+- The current UI supports English, Hindi, Bengali, Marathi, Tamil, Telugu, Kannada, Malayalam, Gujarati, and Punjabi response instructions; answer quality remains dependent on the model and retrieved evidence.
+- The Laboratory Finder only displays authoritative rows already loaded into its database table; it does not scrape or infer laboratories.
 
 ---
 

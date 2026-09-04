@@ -34,8 +34,8 @@ export default function QueryInput({ value, onChange, onSubmit, submitted, loadi
           disabled={loading}
           className="flex items-center justify-center gap-2 rounded-xl bg-[var(--bis-navy)] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[var(--bis-navy-deep)] disabled:opacity-60 sm:w-auto"
         >
-          {loading ? "Asking..." : "Ask Sahayak"}
-          <SendIcon className="h-4 w-4" />
+          <span>{loading ? "Asking..." : "Ask Sahayak"}</span>
+          <SendIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
         </button>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">

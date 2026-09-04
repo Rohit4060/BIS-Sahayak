@@ -32,6 +32,7 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bis_sahayak
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_FALLBACK_API_KEY: ${GEMINI_FALLBACK_API_KEY}
     ports:
       - "8000:8000"
     restart: unless-stopped

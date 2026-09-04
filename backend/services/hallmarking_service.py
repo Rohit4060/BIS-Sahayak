@@ -229,10 +229,6 @@ def get_hallmarking_help(db: Session, question: str):
             temperature=0.1,
         ),
     )
-    print("=== RAW GEMINI OUTPUT ===")
-    print(response.text)
-    print("=========================")
-
     try:
         parsed = json.loads(response.text)
     except (json.JSONDecodeError, AttributeError, TypeError):
