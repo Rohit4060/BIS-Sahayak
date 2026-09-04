@@ -21,13 +21,12 @@ Flow:
        "could not verify" message, never a guess
 """
 import json
-import os
 import re
 
-from google import genai
 from google.genai import types as genai_types
 from sqlalchemy.orm import Session
 
+from services.rag_service import _generate_answer
 from services.search_service import search_chunks
 from services.standards_recommender import (
     _group_chunks_by_standard,
@@ -35,7 +34,6 @@ from services.standards_recommender import (
     _build_evidence_list_for_group,
 )
 
-MODEL_NAME = "gemini-2.5-flash"
 TOP_K = 20  # same as standards_recommender — need coverage across standards
 
 INSUFFICIENT_EVIDENCE_MSG = (
@@ -69,8 +67,6 @@ MANDATORY_KEYWORDS = [
     "liable for",
     "shall be liable",
 ]
-
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 SYSTEM_PROMPT = """You are BIS Sahayak AI, extracting certification and
 compliance requirements for a product, using ONLY retrieved evidence excerpts
@@ -180,10 +176,9 @@ def check_compliance(db: Session, product_description: str):
         f"{json.dumps(valid_keys)}"
     )
 
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=user_message,
-        config=genai_types.GenerateContentConfig(
+    response = _generate_answer(
+        user_message,
+        genai_types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
             max_output_tokens=8000,
             response_mime_type="application/json",

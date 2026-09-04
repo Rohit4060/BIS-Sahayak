@@ -2,8 +2,8 @@
 Tests for M13 Hallmarking Assistant (services/hallmarking_service.py and
 POST /api/hallmarking/help).
 
-Convention: mock services.search_chunks (retrieval) and the Gemini
-client.models.generate_content call directly, so these are fast, offline
+Convention: mock services.search_chunks (retrieval) and the shared Gemini
+generation helper, so these are fast, offline
 unit tests that never touch a real DB or the live Gemini API. Positive-path
 fixtures below are isolated test data, NOT inserted into any real database —
 see M13 instructions section 11 (test data rule).
@@ -45,12 +45,12 @@ class TestRelevantQuestion:
     """A. Relevant hallmarking question: retrieves evidence, produces a
     grounded answer, returns correct citations."""
 
-    @patch("services.hallmarking_service.client")
+    @patch("services.hallmarking_service._generate_answer")
     @patch("services.hallmarking_service.search_chunks")
     def test_grounded_answer_with_citations(self, mock_search, mock_client):
         chunk = _fake_chunk()
         mock_search.return_value = [chunk]
-        mock_client.models.generate_content.return_value = _gemini_response({
+        mock_client.return_value = _gemini_response({
             "status": "supported_by_evidence",
             "answer": "Hallmarking of gold jewellery is applicable under this scheme.",
             "key_points": [
@@ -88,11 +88,11 @@ class TestInsufficientEvidence:
         assert result["answer"] == hs.INSUFFICIENT_EVIDENCE_MSG
         assert result["citations"] == []
 
-    @patch("services.hallmarking_service.client")
+    @patch("services.hallmarking_service._generate_answer")
     @patch("services.hallmarking_service.search_chunks")
     def test_gemini_reports_insufficient(self, mock_search, mock_client):
         mock_search.return_value = [_fake_chunk()]
-        mock_client.models.generate_content.return_value = _gemini_response({
+        mock_client.return_value = _gemini_response({
             "status": "insufficient_evidence",
             "answer": hs.INSUFFICIENT_EVIDENCE_MSG,
             "key_points": [],
@@ -111,12 +111,12 @@ class TestHallucinatedStandardRejection:
     """C. Simulated Gemini output contains an unsupported IS number; it must
     not survive validation."""
 
-    @patch("services.hallmarking_service.client")
+    @patch("services.hallmarking_service._generate_answer")
     @patch("services.hallmarking_service.search_chunks")
     def test_unsupported_standard_number_rejected(self, mock_search, mock_client):
         # Only IS 1417 was actually retrieved.
         mock_search.return_value = [_fake_chunk(standard_number="IS 1417")]
-        mock_client.models.generate_content.return_value = _gemini_response({
+        mock_client.return_value = _gemini_response({
             "status": "supported_by_evidence",
             "answer": "This is also governed by IS 9999, a completely different standard.",
             "key_points": [{"text": "See IS 9999 for details.", "evidence_refs": [1]}],
@@ -135,13 +135,13 @@ class TestUnsupportedMandatoryClaim:
     retrieved evidence does not explicitly support that claim, it must be
     rejected/downgraded."""
 
-    @patch("services.hallmarking_service.client")
+    @patch("services.hallmarking_service._generate_answer")
     @patch("services.hallmarking_service.search_chunks")
     def test_mandatory_claim_without_evidence_support_is_rejected(self, mock_search, mock_client):
         # Evidence text contains NO mandatory-language keywords.
         chunk = _fake_chunk(text="Hallmarking of gold jewellery is applicable under this scheme.")
         mock_search.return_value = [chunk]
-        mock_client.models.generate_content.return_value = _gemini_response({
+        mock_client.return_value = _gemini_response({
             "status": "supported_by_evidence",
             "answer": "Hallmarking is mandatory for all gold jewellery sold in India.",
             "key_points": [{"text": "It is a mandatory legal requirement.", "evidence_refs": [1]}],
@@ -154,13 +154,13 @@ class TestUnsupportedMandatoryClaim:
         assert result["status"] == hs.STATUS_INSUFFICIENT
         assert result["answer"] == hs.INSUFFICIENT_EVIDENCE_MSG
 
-    @patch("services.hallmarking_service.client")
+    @patch("services.hallmarking_service._generate_answer")
     @patch("services.hallmarking_service.search_chunks")
     def test_mandatory_claim_with_evidence_support_is_allowed(self, mock_search, mock_client):
         # Evidence text DOES contain explicit mandatory language this time.
         chunk = _fake_chunk(text="Hallmarking is mandatory for gold jewellery under this scheme.")
         mock_search.return_value = [chunk]
-        mock_client.models.generate_content.return_value = _gemini_response({
+        mock_client.return_value = _gemini_response({
             "status": "supported_by_evidence",
             "answer": "Hallmarking is mandatory for gold jewellery under this scheme.",
             "key_points": [{"text": "It is a mandatory requirement per the evidence.", "evidence_refs": [1]}],
@@ -180,12 +180,12 @@ class TestHallmarkSpecificHallucinationProtection:
     here as an ungrounded key point (no valid evidence_refs), which Safety
     Net 1 strips before it reaches the user."""
 
-    @patch("services.hallmarking_service.client")
+    @patch("services.hallmarking_service._generate_answer")
     @patch("services.hallmarking_service.search_chunks")
     def test_ungrounded_symbol_claim_is_stripped(self, mock_search, mock_client):
         chunk = _fake_chunk()
         mock_search.return_value = [chunk]
-        mock_client.models.generate_content.return_value = _gemini_response({
+        mock_client.return_value = _gemini_response({
             "status": "supported_by_evidence",
             "answer": "You should check the hallmark on your jewellery.",
             "key_points": [
@@ -205,7 +205,7 @@ class TestHallmarkSpecificHallucinationProtection:
 class TestCitationCorrectness:
     """F. Returned citations correspond to actual retrieved database chunks."""
 
-    @patch("services.hallmarking_service.client")
+    @patch("services.hallmarking_service._generate_answer")
     @patch("services.hallmarking_service.search_chunks")
     def test_citations_match_retrieved_chunks_exactly(self, mock_search, mock_client):
         chunk_a = _fake_chunk(standard_number="IS 1417", section="Cl. 4.2", page=12,
@@ -213,7 +213,7 @@ class TestCitationCorrectness:
         chunk_b = _fake_chunk(standard_number="IS 1417", section="Cl. 5.1", page=15,
                                source_url="https://bis.gov.in/is1417")
         mock_search.return_value = [chunk_a, chunk_b]
-        mock_client.models.generate_content.return_value = _gemini_response({
+        mock_client.return_value = _gemini_response({
             "status": "supported_by_evidence",
             "answer": "Grounded answer using both excerpts.",
             "key_points": [{"text": "Point one.", "evidence_refs": [1, 2]}],
@@ -236,14 +236,14 @@ class TestExistingApiRegression:
     as the service-level tests above, so this never touches a real DB or
     the live Gemini API."""
 
-    @patch("services.hallmarking_service.client")
+    @patch("services.hallmarking_service._generate_answer")
     @patch("services.hallmarking_service.search_chunks")
     def test_existing_routes_still_respond(self, mock_search, mock_client, client_with_mock_db):
         client, mock_db = client_with_mock_db
 
         chunk = _fake_chunk()
         mock_search.return_value = [chunk]
-        mock_client.models.generate_content.return_value = _gemini_response({
+        mock_client.return_value = _gemini_response({
             "status": "supported_by_evidence",
             "answer": "Hallmarking of gold jewellery is applicable under this scheme.",
             "key_points": [{"text": "The scheme applies to gold jewellery.", "evidence_refs": [1]}],

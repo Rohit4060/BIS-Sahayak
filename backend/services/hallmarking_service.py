@@ -31,16 +31,14 @@ marks, HUID details, or legal rules from general knowledge. All such
 specifics must come from retrieved evidence, or the assistant refuses.
 """
 import json
-import os
 import re
 
-from google import genai
 from google.genai import types as genai_types
 from sqlalchemy.orm import Session
 
+from services.rag_service import _generate_answer
 from services.search_service import search_chunks
 
-MODEL_NAME = "gemini-2.5-flash"
 TOP_K = 8  # narrower than standards_recommender/compliance (single consumer
            # answer, not a multi-standard survey), wider than /api/chat's 5
            # since hallmarking questions often span symbols + process + redressal
@@ -76,8 +74,6 @@ MANDATORY_KEYWORDS = [
 # Matches things like "IS 1417", "IS-1417", "IS1417:2016" so we can catch a
 # standard number Gemini mentions in prose that wasn't actually retrieved.
 IS_NUMBER_PATTERN = re.compile(r"\bIS[\s-]?\d{2,6}\b", re.IGNORECASE)
-
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 SYSTEM_PROMPT = """You are BIS Sahayak AI, helping consumers understand
 hallmarking-related questions using ONLY retrieved evidence excerpts from
@@ -219,10 +215,9 @@ def get_hallmarking_help(db: Session, question: str):
     evidence_block = _build_evidence_block(chunks)
     user_message = f"QUESTION: {question}\n\nEVIDENCE EXCERPTS:\n{evidence_block}"
 
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=user_message,
-        config=genai_types.GenerateContentConfig(
+    response = _generate_answer(
+        user_message,
+        genai_types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
             max_output_tokens=1500,
             response_mime_type="application/json",

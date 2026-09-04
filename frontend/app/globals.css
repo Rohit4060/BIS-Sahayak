@@ -1,22 +1,42 @@
 @import "tailwindcss";
 
 :root {
-  --bis-navy: #0c2a4a;
-  --bis-navy-deep: #071a30;
-  --bis-saffron: #e86a1c;
-  --bis-chakra: #2f6fed;
-  --bis-paper: #f4f6f9;
-  --bis-ink: #1c2733;
-  --bis-ink-soft: #55606e;
-  --bis-green: #157f4b;
-  --bis-border: #e2e7ee;
+  --bis-navy: #102f52;
+  --bis-navy-deep: #071d35;
+  --bis-accent: #315fbd;
+  --bis-chakra: #236bd6;
+  --bis-paper: #f6f8fb;
+  --bis-surface: #ffffff;
+  --bis-ink: #162536;
+  --bis-ink-soft: #617083;
+  --bis-green: #137447;
+  --bis-border: #dbe3ec;
+  --bis-ring: rgb(35 107 214 / 22%);
 }
 
+* { border-color: var(--bis-border); }
+html { background: var(--bis-paper); }
 body {
-  background-color: var(--bis-paper);
+  min-width: 320px;
+  background: var(--bis-paper);
   color: var(--bis-ink);
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
+
+.app-background {
+  background: radial-gradient(circle at 88% -8%, rgb(35 107 214 / 6%), transparent 28rem), linear-gradient(135deg, #fbfcfe 0%, #f5f8fc 56%, #f8fafd 100%);
+}
+
+.brand-gradient {
+  background: linear-gradient(110deg, var(--bis-navy-deep), var(--bis-accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+button, a, select, textarea, input { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled), a, select { cursor: pointer; }
+button:focus-visible, a:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible { outline: 3px solid var(--bis-ring); outline-offset: 2px; }
 
 .font-display {
   font-family: "Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif;
@@ -26,7 +46,15 @@ body {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
 }
 
+.surface-card { border: 1px solid var(--bis-border); background: var(--bis-surface); box-shadow: 0 1px 2px rgb(15 36 61 / 4%), 0 10px 24px rgb(15 36 61 / 4%); }
+.field-control { border: 1px solid var(--bis-border); background: #f9fafc; transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease; }
+.field-control:focus { border-color: var(--bis-chakra); background: #fff; box-shadow: 0 0 0 4px var(--bis-ring); outline: none; }
+.primary-button { background: var(--bis-navy); box-shadow: 0 6px 14px rgb(7 29 53 / 15%); transition: transform 160ms ease, background-color 160ms ease, box-shadow 160ms ease; }
+.primary-button:hover:not(:disabled) { background: var(--bis-navy-deep); box-shadow: 0 9px 20px rgb(7 29 53 / 20%); transform: translateY(-1px); }
+.primary-button:active:not(:disabled) { transform: translateY(0); }
+.primary-button:disabled { cursor: not-allowed; box-shadow: none; }
+
 ::selection {
-  background: var(--bis-saffron);
+  background: var(--bis-accent);
   color: #fff;
 }

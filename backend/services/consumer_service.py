@@ -34,17 +34,15 @@ information from general knowledge. All such specifics must come from
 retrieved evidence, or the assistant refuses.
 """
 import json
-import os
 import re
 
-from google import genai
 from google.genai import types as genai_types
 from sqlalchemy.orm import Session
 
+from services.rag_service import _generate_answer
 from services.search_service import search_chunks
 from services.hallmarking_service import MANDATORY_KEYWORDS, IS_NUMBER_PATTERN
 
-MODEL_NAME = "gemini-2.5-flash"
 TOP_K = 8
 
 INSUFFICIENT_EVIDENCE_MSG = "I could not verify this from the available BIS sources."
@@ -91,8 +89,6 @@ CLAIM_CATEGORIES = {
     "safety": SAFETY_KEYWORDS,
     "legality": LEGALITY_KEYWORDS,
 }
-
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 SYSTEM_PROMPT = """You are BIS Sahayak AI, helping everyday consumers understand
 BIS-related questions using ONLY retrieved evidence excerpts from official BIS
@@ -249,10 +245,9 @@ def get_consumer_help(db: Session, question: str):
     evidence_block = _build_evidence_block(chunks)
     user_message = f"QUESTION: {question}\n\nEVIDENCE EXCERPTS:\n{evidence_block}"
 
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=user_message,
-        config=genai_types.GenerateContentConfig(
+    response = _generate_answer(
+        user_message,
+        genai_types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
             max_output_tokens=8000,
             response_mime_type="application/json",

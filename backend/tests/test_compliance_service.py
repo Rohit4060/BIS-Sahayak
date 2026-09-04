@@ -24,7 +24,7 @@ def _fake_chunk(standard_number="IS 999 : 2024", section="1. TEST", page=1,
 
 
 class FakeGeminiResponse:
-    """Mimics the shape of client.models.generate_content(...)'s return value."""
+    """Mimics the shared generation helper's response value."""
     def __init__(self, text):
         self.text = text
 
@@ -48,7 +48,7 @@ def test_hallucinated_standard_is_discarded():
     )
 
     with patch.object(compliance_service, "search_chunks", return_value=real_chunks), \
-         patch.object(compliance_service.client.models, "generate_content",
+         patch.object(compliance_service, "_generate_answer",
                       return_value=FakeGeminiResponse(gemini_json)):
         result = compliance_service.check_compliance(db=MagicMock(), product_description="test product")
 
@@ -76,7 +76,7 @@ def test_confirmed_mandatory_downgraded_without_keyword_support():
     )
 
     with patch.object(compliance_service, "search_chunks", return_value=weak_chunks), \
-         patch.object(compliance_service.client.models, "generate_content",
+         patch.object(compliance_service, "_generate_answer",
                       return_value=FakeGeminiResponse(gemini_json)):
         result = compliance_service.check_compliance(db=MagicMock(), product_description="test product")
 
@@ -99,7 +99,7 @@ def test_confirmed_mandatory_survives_with_keyword_support():
     )
 
     with patch.object(compliance_service, "search_chunks", return_value=strong_chunks), \
-         patch.object(compliance_service.client.models, "generate_content",
+         patch.object(compliance_service, "_generate_answer",
                       return_value=FakeGeminiResponse(gemini_json)):
         result = compliance_service.check_compliance(db=MagicMock(), product_description="test product")
 
@@ -119,7 +119,7 @@ def test_invalid_status_defaults_to_potentially_applicable():
     )
 
     with patch.object(compliance_service, "search_chunks", return_value=chunks), \
-         patch.object(compliance_service.client.models, "generate_content",
+         patch.object(compliance_service, "_generate_answer",
                       return_value=FakeGeminiResponse(gemini_json)):
         result = compliance_service.check_compliance(db=MagicMock(), product_description="test product")
 
@@ -130,7 +130,7 @@ def test_no_retrieved_chunks_returns_insufficient_evidence():
     """If retrieval finds nothing at all, Gemini should never be called, and
     the response should be the honest insufficient-evidence message."""
     with patch.object(compliance_service, "search_chunks", return_value=[]), \
-         patch.object(compliance_service.client.models, "generate_content") as mock_gemini:
+         patch.object(compliance_service, "_generate_answer") as mock_gemini:
         result = compliance_service.check_compliance(db=MagicMock(), product_description="test product")
 
     mock_gemini.assert_not_called()
@@ -144,7 +144,7 @@ def test_malformed_gemini_json_returns_insufficient_evidence():
     chunks = [_fake_chunk()]
 
     with patch.object(compliance_service, "search_chunks", return_value=chunks), \
-         patch.object(compliance_service.client.models, "generate_content",
+         patch.object(compliance_service, "_generate_answer",
                       return_value=FakeGeminiResponse("this is not valid json {{{")):
         result = compliance_service.check_compliance(db=MagicMock(), product_description="test product")
 

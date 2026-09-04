@@ -33,15 +33,11 @@ def _gemini_response(payload):
 def _patch_gemini(monkeypatch, payload):
     calls = []
 
-    def generate_content(**kwargs):
-        calls.append(kwargs)
+    def generate_content(*args, **kwargs):
+        calls.append({"config": kwargs.get("config", args[1])})
         return _gemini_response(payload)
 
-    monkeypatch.setattr(
-        consumer_service.client.models,
-        "generate_content",
-        generate_content,
-    )
+    monkeypatch.setattr(consumer_service, "_generate_answer", generate_content)
     return calls
 
 
@@ -90,11 +86,7 @@ def test_invalid_gemini_json_returns_insufficient_evidence(monkeypatch):
     class Response:
         text = "{not valid json"
 
-    monkeypatch.setattr(
-        consumer_service.client.models,
-        "generate_content",
-        lambda **kwargs: Response(),
-    )
+    monkeypatch.setattr(consumer_service, "_generate_answer", lambda *args: Response())
 
     result = consumer_service.get_consumer_help(object(), "Any BIS question")
 
