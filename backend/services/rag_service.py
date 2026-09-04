@@ -11,6 +11,8 @@ Flow:
 """
 import os
 import re
+import logging
+import time
 
 from google import genai
 from google.genai import types as genai_types
@@ -18,7 +20,10 @@ from sqlalchemy.orm import Session
 
 from services.search_service import search_chunks
 
-MODEL_NAME = "gemini-2.5-flash"
+PRIMARY_MODEL = "gemini-3.6-flash"
+FALLBACK_MODEL = "gemini-2.5-flash"
+MAX_GENERATION_ATTEMPTS_PER_MODEL = 2
+RETRY_DELAY_SECONDS = 0.5
 TOP_K = 5
 INSUFFICIENT_EVIDENCE_MSG = "I could not verify this from the available BIS sources."
 
@@ -73,7 +78,29 @@ SCRIPT_LANGUAGE_RANGES = (
 # retrieved chunk rows.
 IS_NUMBER_PATTERN = re.compile(r"\bIS[\s-]?\d{2,6}\b", re.IGNORECASE)
 
+# A response that ends with only a list marker has been cut off before the
+# list item could be generated (for example, the observed final ``\\*``).
+# This is intentionally narrow: it rejects a structurally incomplete Markdown
+# list, not ordinary prose that merely happens to contain punctuation.
+UNFINISHED_MARKDOWN_LIST_ITEM_PATTERN = re.compile(
+    r"(?:^|\n)\s*(?:\\?[*+-]|\d+[.)])\s*$"
+)
+UNESCAPED_BOLD_MARKER_PATTERN = re.compile(r"(?<!\\)\*\*")
+# BIS identifiers frequently include a four-digit publication year. A reply
+# ending after one to three year digits (such as the observed ``: 202``) is
+# structurally cut off rather than a complete claim.
+TRUNCATED_YEAR_PATTERN = re.compile(r"(?:^|[:/]\s*)(?:19|20)\d{0,2}$")
+
+logger = logging.getLogger(__name__)
+
+
+class UnusableGeminiOutputError(Exception):
+    """Gemini returned no usable complete answer, without inventing one."""
+
+# Each generation client is bound to its own server-side key. Neither client
+# nor either key is ever passed through an API response or logged.
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+fallback_client = genai.Client(api_key=os.environ.get("GEMINI_FALLBACK_API_KEY"))
 
 SYSTEM_PROMPT = """You are BIS Sahayak AI, an assistant for Indian Standards (IS) and
 Bureau of Indian Standards (BIS) compliance topics.
@@ -223,6 +250,123 @@ def _output_mentions_hallucinated_standard(answer: str, chunks) -> bool:
     return any(standard not in valid for standard in mentioned)
 
 
+def _gemini_error_status(error: Exception) -> int | None:
+    """Return a Google GenAI HTTP status code when the SDK exposes one."""
+    for value in (getattr(error, "code", None), getattr(error, "status_code", None)):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _is_retryable_gemini_error(error: Exception) -> bool:
+    """Limit fallback to known temporary/provider failures, never all errors."""
+    status = _gemini_error_status(error)
+    if status in {429, 503}:
+        return True
+
+    # Some google-genai transport errors expose the provider status only in
+    # their message. Restrict this to the documented transient conditions.
+    message = str(error).upper()
+    return any(marker in message for marker in (
+        "429 RESOURCE_EXHAUSTED",
+        "503 UNAVAILABLE",
+        "RESOURCE_EXHAUSTED",
+        "UNAVAILABLE",
+        "TEMPORARY SERVICE",
+        "TEMPORARILY UNAVAILABLE",
+    ))
+
+
+def _extract_complete_answer(response) -> str:
+    """Read Gemini text and reject only clearly malformed/truncated output.
+
+    Grounding, language, and hallucinated-standard checks remain in the
+    existing response-validation path below. This helper makes no attempt to
+    repair or complete model text.
+    """
+    try:
+        answer = (response.text or "").strip()
+    except Exception as error:
+        raise UnusableGeminiOutputError("Gemini response text was unavailable.") from error
+
+    if not answer:
+        raise UnusableGeminiOutputError("Gemini returned an empty response.")
+    candidates = getattr(response, "candidates", None) or []
+    for candidate in candidates:
+        finish_reason = getattr(candidate, "finish_reason", "")
+        if "MAX_TOKENS" in str(finish_reason).upper():
+            raise UnusableGeminiOutputError("Gemini response stopped at its output-token limit.")
+    if UNFINISHED_MARKDOWN_LIST_ITEM_PATTERN.search(answer):
+        raise UnusableGeminiOutputError("Gemini response ended in an unfinished Markdown list item.")
+    if len(UNESCAPED_BOLD_MARKER_PATTERN.findall(answer)) % 2:
+        raise UnusableGeminiOutputError("Gemini response ended with unclosed Markdown emphasis.")
+    if TRUNCATED_YEAR_PATTERN.search(answer):
+        raise UnusableGeminiOutputError("Gemini response ended in an incomplete publication year.")
+    return answer
+
+
+def _generate_with_retry(gemini_client, model: str, user_message: str, config: genai_types.GenerateContentConfig):
+    """Make at most two attempts for retryable provider failures or unusable output."""
+    for attempt in range(1, MAX_GENERATION_ATTEMPTS_PER_MODEL + 1):
+        try:
+            response = gemini_client.models.generate_content(
+                model=model,
+                contents=user_message,
+                config=config,
+            )
+            _extract_complete_answer(response)
+            return response
+        except UnusableGeminiOutputError:
+            if attempt == MAX_GENERATION_ATTEMPTS_PER_MODEL:
+                raise
+            logger.warning(
+                "Gemini model %s returned a malformed or incomplete response; retrying once.",
+                model,
+            )
+        except Exception as error:
+            if not _is_retryable_gemini_error(error) or attempt == MAX_GENERATION_ATTEMPTS_PER_MODEL:
+                raise
+            logger.warning(
+                "Gemini model %s had a retryable provider failure; retrying once.",
+                model,
+            )
+            time.sleep(RETRY_DELAY_SECONDS)
+
+
+def _generate_answer(user_message: str, config: genai_types.GenerateContentConfig):
+    """Try the primary model (with one bounded retry), then the fallback
+    model (also with one bounded retry) for transient provider failures or a
+    clearly unusable response.
+
+    Provider failures after both paths intentionally propagate to main.py,
+    which retains the established safe service-unavailable response. A
+    response that is structurally unusable is handled by get_rag_response's
+    existing safe insufficient-evidence path.
+    """
+    try:
+        return _generate_with_retry(client, PRIMARY_MODEL, user_message, config)
+    except Exception as primary_error:
+        if not (
+            _is_retryable_gemini_error(primary_error)
+            or isinstance(primary_error, UnusableGeminiOutputError)
+        ):
+            raise
+
+        logger.warning(
+            "Primary Gemini generation was unusable after its bounded retry; attempting fallback model."
+        )
+        try:
+            response = _generate_with_retry(fallback_client, FALLBACK_MODEL, user_message, config)
+        except Exception:
+            logger.warning("Gemini fallback generation failed after its bounded retry.")
+            raise
+
+        logger.info("Gemini fallback generation succeeded.")
+        return response
+
+
 def get_rag_response(db: Session, question: str, language: str | None = None):
     """
     Returns {"answer": str, "citations": list[dict]}.
@@ -237,16 +381,20 @@ def get_rag_response(db: Session, question: str, language: str | None = None):
     evidence_block = _build_evidence_block(chunks)
     user_message = f"QUESTION: {question}\n\nEVIDENCE EXCERPTS:\n{evidence_block}"
 
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=user_message,
-        config=genai_types.GenerateContentConfig(
-            system_instruction=f"{SYSTEM_PROMPT}\n\n{_language_instruction(response_language)}",
-            max_output_tokens=1000,
-        ),
-    )
+    try:
+        response = _generate_answer(
+            user_message,
+            genai_types.GenerateContentConfig(
+                system_instruction=f"{SYSTEM_PROMPT}\n\n{_language_instruction(response_language)}",
+                max_output_tokens=1000,
+            ),
+        )
+        answer = _extract_complete_answer(response)
+    except UnusableGeminiOutputError:
+        # Both bounded model paths produced unusable text. Preserve the
+        # existing safe RAG response rather than fabricating a completion.
+        return {"answer": insufficient_evidence_message(response_language), "citations": []}
 
-    answer = (response.text or "").strip()
     if (
         not answer
         or not _answer_uses_requested_script(answer, response_language)

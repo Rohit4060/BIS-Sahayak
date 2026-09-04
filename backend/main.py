@@ -1,8 +1,11 @@
 from dotenv import load_dotenv
+import logging
+
 load_dotenv()  # Reads backend/.env and loads GEMINI_API_KEY into the environment
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Literal
 
@@ -20,6 +23,7 @@ from services.consumer_service import get_consumer_help
 from fastapi import HTTPException
 
 app = FastAPI(title="BIS Sahayak AI Backend")
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,6 +49,11 @@ class Citation(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     citations: list[Citation] = []
+
+
+class UTF8JSONResponse(JSONResponse):
+    """Make /api/chat's UTF-8 JSON charset explicit for HTTP clients."""
+    media_type = "application/json; charset=utf-8"
 
 
 class SearchRequest(BaseModel):
@@ -187,11 +196,12 @@ def db_health(db: Session = Depends(get_db)):
     try:
         db.execute(text("SELECT 1"))
         return {"status": "ok", "database": "connected"}
-    except Exception as e:
-        return {"status": "error", "database": "unreachable", "detail": str(e)}
+    except Exception:
+        logger.error("Database health check failed.")
+        return {"status": "error", "database": "unreachable", "detail": "Database is unreachable."}
 
 
-@app.post("/api/chat", response_model=ChatResponse)
+@app.post("/api/chat", response_model=ChatResponse, response_class=UTF8JSONResponse)
 def chat(request: ChatRequest, db: Session = Depends(get_db)):
     if not request.message.strip():
         return ChatResponse(reply="Please enter a question for Sahayak.", citations=[])
@@ -200,8 +210,11 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
         result = get_rag_response(db, request.message.strip(), request.language)
         footer = format_citation_footer(result["citations"])
         return ChatResponse(reply=result["answer"] + footer, citations=result["citations"])
-    except Exception as e:
-        print(f"RAG error: {e}")
+    except Exception:
+        # The generation helper records only safe model-fallback events. Keep
+        # this final service-failure log free of provider error details, which
+        # can include request diagnostics.
+        logger.error("RAG generation failed.")
         return ChatResponse(
             reply="Sorry, Sahayak's AI service is having trouble right now. Please try again in a moment.",
             citations=[],
@@ -218,8 +231,8 @@ def search(request: SearchRequest, db: Session = Depends(get_db)):
 
     try:
         results = search_chunks(db, request.query.strip(), top_k)
-    except Exception as e:
-        print(f"Search error: {e}")
+    except Exception:
+        logger.error("Search request failed.")
         raise HTTPException(status_code=500, detail="Search failed. Please try again.")
 
     return SearchResponse(results=results)
@@ -231,8 +244,8 @@ def recommend(request: RecommendRequest, db: Session = Depends(get_db)):
 
     try:
         result = recommend_standards(db, request.product_description.strip())
-    except Exception as e:
-        print(f"Standards recommend error: {e}")
+    except Exception:
+        logger.error("Standards recommendation request failed.")
         raise HTTPException(
             status_code=500,
             detail="Standards recommendation failed. Please try again.",
@@ -249,8 +262,8 @@ def compliance_check(request: ComplianceRequest, db: Session = Depends(get_db)):
 
     try:
         result = check_compliance(db, request.product_description.strip())
-    except Exception as e:
-        print(f"Compliance check error: {e}")
+    except Exception:
+        logger.error("Compliance check request failed.")
         raise HTTPException(
             status_code=500,
             detail="Compliance check failed. Please try again.",
@@ -265,8 +278,8 @@ def hallmarking_help(request: HallmarkingRequest, db: Session = Depends(get_db))
 
     try:
         result = get_hallmarking_help(db, request.question.strip())
-    except Exception as e:
-        print(f"Hallmarking help error: {e}")
+    except Exception:
+        logger.error("Hallmarking help request failed.")
         raise HTTPException(
             status_code=500,
             detail="Hallmarking assistant failed. Please try again.",
@@ -327,8 +340,8 @@ def consumer_help(request: ConsumerRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="question cannot be empty.")
     try:
         result = get_consumer_help(db, request.question.strip())
-    except Exception as e:
-        print(f"Consumer help error: {e}")
+    except Exception:
+        logger.error("Consumer help request failed.")
         raise HTTPException(
             status_code=500,
             detail="Consumer assistant failed. Please try again.",
@@ -343,8 +356,8 @@ def labs_find(request: LabFindRequest, db: Session = Depends(get_db)):
 
     try:
         labs = find_labs(db, request.product_description.strip(), request.standard_number)
-    except Exception as e:
-        print(f"Labs find error: {e}")
+    except Exception:
+        logger.error("Laboratory finder request failed.")
         raise HTTPException(status_code=500, detail="Laboratory search failed. Please try again.")
 
     if not labs:

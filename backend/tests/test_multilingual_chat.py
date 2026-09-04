@@ -48,6 +48,44 @@ def test_hindi_question_uses_existing_retrieval_and_requests_hindi(mock_search, 
     assert "FINAL RESPONSE LANGUAGE: Hindi (hi)" in system_instruction
 
 
+@patch("services.rag_service.fallback_client")
+@patch("services.rag_service.client")
+@patch("services.rag_service.search_chunks")
+def test_is_302_hindi_response_is_accepted_when_complete(mock_search, mock_client, mock_fallback):
+    mock_search.return_value = [_chunk()]
+    answer = "IS 302 Part 1:2024 घरेलू और समान विद्युत उपकरणों की सुरक्षा से संबंधित है [1]।"
+    mock_client.models.generate_content.return_value = _response(answer)
+
+    result = rag_service.get_rag_response(MagicMock(), "IS 302 Part 1 क्या है?", "hi")
+
+    assert result["answer"] == answer
+    assert result["citations"] == rag_service._build_citations(mock_search.return_value)
+    call = mock_client.models.generate_content.call_args.kwargs
+    assert "QUESTION: IS 302 Part 1 क्या है?" in call["contents"]
+    assert "FINAL RESPONSE LANGUAGE: Hindi (hi)" in call["config"].system_instruction
+    mock_fallback.models.generate_content.assert_not_called()
+
+
+@patch("services.rag_service.fallback_client")
+@patch("services.rag_service.client")
+@patch("services.rag_service.search_chunks")
+def test_truncated_hindi_request_response_retries_then_uses_complete_hindi_fallback(
+    mock_search, mock_client, mock_fallback
+):
+    mock_search.return_value = [_chunk()]
+    incomplete = "Based on the provided evidence, **IS 302 (Part 1) : 2024 / IEC 60335-1 : 202"
+    mock_client.models.generate_content.side_effect = [_response(incomplete), _response(incomplete)]
+    fallback_answer = "IS 302 Part 1:2024 घरेलू और समान विद्युत उपकरणों की सुरक्षा से संबंधित है [1]।"
+    mock_fallback.models.generate_content.return_value = _response(fallback_answer)
+
+    result = rag_service.get_rag_response(MagicMock(), "IS 302 Part 1 क्या है?", "hi")
+
+    assert result["answer"] == fallback_answer
+    assert result["citations"] == rag_service._build_citations(mock_search.return_value)
+    assert mock_client.models.generate_content.call_count == 2
+    mock_fallback.models.generate_content.assert_called_once()
+
+
 @patch("services.rag_service.client")
 @patch("services.rag_service.search_chunks")
 def test_bengali_auto_detection_and_identifier_preservation(mock_search, mock_client):
@@ -144,3 +182,25 @@ def test_chat_api_passes_language_and_keeps_db_citations(mock_search, mock_clien
 
     assert response.status_code == 200
     assert response.json()["citations"][0]["standard_number"] == "IS 302 Part 1:2024"
+
+
+@patch("services.rag_service.client")
+@patch("services.rag_service.search_chunks")
+def test_chat_api_serializes_hindi_reply_as_utf8_json(mock_search, mock_client, client_with_mock_db):
+    client, _ = client_with_mock_db
+    mock_search.return_value = [_chunk()]
+    answer = "IS 302 Part 1:2024 घरेलू और समान विद्युत उपकरणों की सुरक्षा से संबंधित है [1]।"
+    mock_client.models.generate_content.return_value = _response(answer)
+
+    response = client.post(
+        "/api/chat",
+        json={"message": "IS 302 Part 1 क्या है?", "language": "hi"},
+    )
+
+    raw_body = response.content.decode("utf-8")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json; charset=utf-8"
+    assert answer in raw_body
+    assert "à¤" not in raw_body
+    assert response.json()["reply"].startswith("IS 302 Part 1:2024 घरेलू")
+    assert response.json()["citations"] == rag_service._build_citations(mock_search.return_value)

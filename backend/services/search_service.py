@@ -22,11 +22,12 @@ from models import Document, DocumentChunk
 
 EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_DIM = 768
-# Live M17 evaluation found the unrelated rocket-engine query peaked at 0.6415,
-# while the lowest evaluated supported result was 0.6552. This floor avoids
-# presenting a semantic near-match as evidence; callers retain their existing
-# insufficient-evidence fallback when no chunk clears it.
-MIN_RELEVANCE_SCORE = 0.65
+# The current populated KB's live retrieval audit found IS 302 to be the top
+# result for "electric pressure cooker" at 0.5874 and "pressure cooker" at
+# 0.5832. The unrelated "titanium spacecraft heat shield" control peaked at
+# 0.5690. Keep a small evidence-floor margin: this admits the existing IS 302
+# household-appliance evidence while preserving the unrelated-query fallback.
+MIN_RELEVANCE_SCORE = 0.58
 
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 

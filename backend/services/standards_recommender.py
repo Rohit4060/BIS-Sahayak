@@ -19,22 +19,18 @@ Flow:
        "could not determine" message, never a guess
 """
 import json
-import os
 from collections import defaultdict
 
-from google import genai
 from google.genai import types as genai_types
 from sqlalchemy.orm import Session
 
+from services.rag_service import _generate_answer
 from services.search_service import search_chunks
 
-MODEL_NAME = "gemini-2.5-flash"
 TOP_K = 20  # wider than /api/chat's TOP_K=5 — need coverage across standards, not one answer
 INSUFFICIENT_EVIDENCE_MSG = (
     "I could not determine an applicable BIS standard from the available BIS sources."
 )
-
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 SYSTEM_PROMPT = """You are BIS Sahayak AI, evaluating which BIS/Indian Standards
 might apply to a product, using ONLY retrieved evidence excerpts grouped by
@@ -162,10 +158,13 @@ def recommend_standards(db: Session, product_description: str):
         f"{json.dumps(valid_keys)}"
     )
 
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=user_message,
-        config=genai_types.GenerateContentConfig(
+    # Reuse the chat generation helper so this workflow shares its existing
+    # server-side model configuration and bounded primary/fallback behavior.
+    # The recommendation prompt, retrieved evidence, JSON configuration, and
+    # all validation below remain unchanged.
+    response = _generate_answer(
+        user_message,
+        genai_types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
             max_output_tokens=1500,
             response_mime_type="application/json",
