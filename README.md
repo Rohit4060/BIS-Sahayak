@@ -237,6 +237,8 @@ python scripts\test_search.py
 
 ## Demo Workflow
 
+For a concise 3–5 minute presentation sequence, see [the hackathon demo script](docs/HACKATHON_DEMO.md).
+
 Use questions that match the currently indexed evidence. The expected standard/document is a guide for the demonstrator; the application remains evidence-first and may correctly return insufficient evidence if the retrieval threshold is not met.
 
 | Demo question | Workflow | Expected evidence | Why it is reliable |
@@ -257,6 +259,20 @@ The Laboratory Finder is safe to demonstrate with an empty-result query: the cur
 - The automated `pytest` suite covers the existing backend workflows and Gemini fallback behavior; it does not consume live Gemini quota.
 - The current UI supports English, Hindi, Bengali, Marathi, Tamil, Telugu, Kannada, Malayalam, Gujarati, and Punjabi response instructions; answer quality remains dependent on the model and retrieved evidence.
 - The Laboratory Finder only displays authoritative rows already loaded into its database table; it does not scrape or infer laboratories.
+
+---
+
+## Deployment Readiness
+
+The project is designed to run as three services:
+
+- **Next.js frontend:** a stateless container, configured with `NEXT_PUBLIC_API_BASE_URL` pointing to the public HTTPS backend URL.
+- **FastAPI backend:** a stateless container that receives `DATABASE_URL`, `GEMINI_API_KEY`, and `GEMINI_FALLBACK_API_KEY` from the deployment platform's secret manager.
+- **PostgreSQL + pgvector:** a managed PostgreSQL instance with the `vector` extension, or a PostgreSQL/pgvector container backed by persistent storage. This is the only component that must retain durable data.
+
+For a small hackathon deployment, run the existing Docker Compose services on one host behind a reverse proxy with TLS. Keep the Postgres volume on durable storage and never use `docker compose down -v` in an environment whose knowledge base must be retained. For a split deployment, set FastAPI CORS `allow_origins` to the exact deployed frontend origin(s), replacing the localhost-only development setting. Do not use `*` with credentialed requests.
+
+Store every password, database URL, and Gemini key in platform-managed environment variables or secrets; never put them in the repository or frontend bundle. The frontend and backend can scale statelessly, while the database requires backups and persistent storage.
 
 ---
 

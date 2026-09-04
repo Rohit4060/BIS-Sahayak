@@ -15,26 +15,26 @@ export const quickActions: QuickAction[] = [
   {
     id: "find-standard",
     title: "Find Applicable Standard",
-    description: "Identify the exact Indian Standard that applies to your product category.",
-    prompt: "Which Indian Standard applies to my product?",
+    description: "Review standards that are relevant to your product in the retrieved BIS evidence.",
+    prompt: "What does IS 302 Part 1 cover?",
   },
   {
     id: "certification-guidance",
-    title: "Certification Guidance",
-    description: "Walk through the ISI Mark or CRS certification process step by step.",
-    prompt: "Guide me through the certification process for my product.",
+    title: "Compliance Evidence",
+    description: "Review requirements only when they are supported by the available BIS sources.",
+    prompt: "What does IS 302 Part 1 cover?",
   },
   {
     id: "testing-requirements",
-    title: "Testing Requirements",
-    description: "See mandatory test parameters, sample sizes and lab prerequisites.",
-    prompt: "What tests are required before I can get certified?",
+    title: "Evidence and Citations",
+    description: "See retrieved excerpts and source citations behind each supported result.",
+    prompt: "What is IS 17423:2021?",
   },
   {
     id: "laboratory-finder",
     title: "Laboratory Finder",
-    description: "Locate BIS-recognised testing laboratories near your facility.",
-    prompt: "Find a BIS-recognised laboratory near me.",
+    description: "Search only the authoritative laboratory records currently available in the database.",
+    prompt: "household electrical appliance",
   },
 ];
 
@@ -45,10 +45,10 @@ export const stats: Stat[] = [
 ];
 
 export const sampleQueries: string[] = [
-  "IS code for LED bulbs?",
-  "CRS registration steps for chargers",
-  "Hallmarking requirement for jewellery",
-  "Is BIS certification mandatory for toys?",
+  "What does IS 302 Part 1 cover?",
+  "What is IS 17423:2021?",
+  "What should I know about hallmarking gold jewellery?",
+  "What BIS standard applies to a rocket engine?",
 ];
 
 export const standardCodes: string[] = [
